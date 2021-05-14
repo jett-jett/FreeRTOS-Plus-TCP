@@ -122,6 +122,9 @@
         #if ( ipconfigUSE_LINKED_RX_MESSAGES != 0 )
             struct xNETWORK_BUFFER * pxNextBuffer; /**< Possible optimisation for expert users - requires network driver support. */
         #endif
+        #if ( ipconfigSUPPORT_IP_MULTICAST != 0 )
+            uint8_t ucSendTTL; /**< Outgoing TimeToLive value. Required for multicasts. */
+        #endif
     } NetworkBufferDescriptor_t;
 
     #include "pack_struct_start.h"

@@ -288,20 +288,23 @@
     typedef enum
     {
         eNoEvent = -1,
-        eNetworkDownEvent,     /* 0: The network interface has been lost and/or needs [re]connecting. */
-        eNetworkRxEvent,       /* 1: The network interface has queued a received Ethernet frame. */
-        eNetworkTxEvent,       /* 2: Let the IP-task send a network packet. */
-        eARPTimerEvent,        /* 3: The ARP timer expired. */
-        eStackTxEvent,         /* 4: The software stack has queued a packet to transmit. */
-        eDHCPEvent,            /* 5: Process the DHCP state machine. */
-        eTCPTimerEvent,        /* 6: See if any TCP socket needs attention. */
-        eTCPAcceptEvent,       /* 7: Client API FreeRTOS_accept() waiting for client connections. */
-        eTCPNetStat,           /* 8: IP-task is asked to produce a netstat listing. */
-        eSocketBindEvent,      /* 9: Send a message to the IP-task to bind a socket to a port. */
-        eSocketCloseEvent,     /*10: Send a message to the IP-task to close a socket. */
-        eSocketSelectEvent,    /*11: Send a message to the IP-task for select(). */
-        eSocketSignalEvent,    /*12: A socket must be signalled. */
-        eSocketSetDeleteEvent, /*13: A socket set must be deleted. */
+        eNetworkDownEvent,        /* 0: The network interface has been lost and/or needs [re]connecting. */
+        eNetworkRxEvent,          /* 1: The network interface has queued a received Ethernet frame. */
+        eNetworkTxEvent,          /* 2: Let the IP-task send a network packet. */
+        eARPTimerEvent,           /* 3: The ARP timer expired. */
+        eStackTxEvent,            /* 4: The software stack has queued a packet to transmit. */
+        eDHCPEvent,               /* 5: Process the DHCP state machine. */
+        eTCPTimerEvent,           /* 6: See if any TCP socket needs attention. */
+        eTCPAcceptEvent,          /* 7: Client API FreeRTOS_accept() waiting for client connections. */
+        eTCPNetStat,              /* 8: IP-task is asked to produce a netstat listing. */
+        eSocketBindEvent,         /* 9: Send a message to the IP-task to bind a socket to a port. */
+        eSocketCloseEvent,        /*10: Send a message to the IP-task to close a socket. */
+        eSocketSelectEvent,       /*11: Send a message to the IP-task for select(). */
+        eSocketSignalEvent,       /*12: A socket must be signalled. */
+        eSocketSetDeleteEvent,    /*13: A socket set must be deleted. */
+        eSocketOptAddMembership,  /*14: Register a UDP socket to a multicast group. */
+        eSocketOptDropMembership, /*15: Unregister a UDP socket from a multicast group. */
+        eIGMPEvent,               /*16: */
     } eIPEvent_t;
 
 /**
@@ -694,6 +697,13 @@
                                               */
             FOnUDPSent_t pxHandleSent;       /**< Function pointer to handle the events after a successful send. */
         #endif /* ipconfigUSE_CALLBACKS */
+        #if ( ipconfigSUPPORT_IP_MULTICAST != 0 )
+            List_t xMulticastGroupsList;
+            uint8_t ucMulticastTTL; /**< Allows for multicast sockets to use a different TTL value to limit the scope of the multicast packet. Usually set to 1.
+                                     * Example:
+                                     * FreeRTOS_setsockopt( MCastSendSock, 0, FREERTOS_SO_IP_MULTICAST_TTL, ( void * ) &ucMulticastTTL, sizeof( uint8_t ) );
+                                     */
+        #endif
     } IPUDPSocket_t;
 
 /* Formally typedef'd as eSocketEvent_t. */

@@ -49,6 +49,9 @@
 #include "NetworkInterface.h"
 #include "NetworkBufferManagement.h"
 #include "FreeRTOS_DNS.h"
+#if ( ipconfigSUPPORT_IP_MULTICAST != 0 )
+    #include "FreeRTOS_IGMP.h"
+#endif
 
 
 /* Used to ensure the structure packing is having the desired effect.  The
@@ -396,6 +399,12 @@ static void prvIPTask( void * pvParameters )
         }
     #endif
 
+    /* Init the list that will hold scheduled IGMP reports. */
+    #if ( ipconfigSUPPORT_IP_MULTICAST != 0 )
+        ( void ) vIGMP_Init();
+        prvIPTimerReload( &xIGMPTimer, pdMS_TO_TICKS( ipIGMP_TIMER_PERIOD_MS ) );
+    #endif
+
     /* Initialisation is complete and events can now be processed. */
     xIPTaskInitialised = pdTRUE;
 
@@ -606,6 +615,26 @@ static void prvIPTask( void * pvParameters )
                 /* xQueueReceive() returned because of a normal time-out. */
                 break;
 
+                #if ( ipconfigSUPPORT_IP_MULTICAST != 0 )
+                    case eSocketOptAddMembership:
+                       {
+                           MCastGroupDesc_t * pxMCG = ipCAST_PTR_TO_TYPE_PTR( MCastGroupDesc_t, xReceivedEvent.pvData );
+                           ( void ) vModifyMulticastMembership( pxMCG, eSocketOptAddMembership );
+                           break;
+                       }
+
+                    case eSocketOptDropMembership:
+                       {
+                           MCastGroupDesc_t * pxMCG = ipCAST_PTR_TO_TYPE_PTR( MCastGroupDesc_t, xReceivedEvent.pvData );
+                           ( void ) vModifyMulticastMembership( pxMCG, eSocketOptDropMembership );
+                           break;
+                       }
+
+                    case eIGMPEvent:
+                        ( void ) vHandleIGMP_Event();
+                        break;
+                #endif /* ( ipconfigSUPPORT_IP_MULTICAST != 0) */
+
             default:
                 /* Should not get here. */
                 break;
@@ -750,6 +779,15 @@ static TickType_t prvCalculateSleepTime( void )
         }
     #endif
 
+    #if ( ipconfigSUPPORT_IP_MULTICAST == 1 )
+        {
+            if( xIGMPTimer.ulRemainingTime < xMaximumSleepTime )
+            {
+                xMaximumSleepTime = xIGMPTimer.ulRemainingTime;
+            }
+        }
+    #endif /* ipconfigSUPPORT_IP_MULTICAST */
+
     #if ( ipconfigDNS_USE_CALLBACKS != 0 )
         {
             if( xDNSTimer.bActive != pdFALSE_UNSIGNED )
@@ -835,6 +873,16 @@ static void prvCheckNetworkTimers( void )
             }
         }
     #endif /* ipconfigUSE_TCP == 1 */
+
+    #if ( ipconfigSUPPORT_IP_MULTICAST != 0 )
+        {
+            /* Is it time to send any IGMP reports? */
+            if( prvIPTimerCheck( &xIGMPTimer ) != pdFALSE )
+            {
+                ( void ) xSendIGMPEvent();
+            }
+        }
+    #endif /* ipconfigSUPPORT_IP_MULTICAST != 0 */
 }
 /*-----------------------------------------------------------*/
 
@@ -1941,6 +1989,10 @@ static eFrameProcessingResult_t prvAllowIPPacket( const IPPacket_t * const pxIPP
                          /* Is it the LLMNR multicast address? */
                          ( ulDestinationIPAddress != ipLLMNR_IP_ADDR ) &&
                      #endif
+                     #if ( ipconfigSUPPORT_IP_MULTICAST != 0 )
+                         /* Is this a multicast packet? */
+                         ( pdFALSE == xIsIPv4Multicast( ulDestinationIPAddress ) ) &&
+                     #endif
                      /* Or (during DHCP negotiation) we have no IP-address yet? */
                      ( *ipLOCAL_IP_ADDRESS_POINTER != 0UL ) )
             {
@@ -1949,7 +2001,8 @@ static eFrameProcessingResult_t prvAllowIPPacket( const IPPacket_t * const pxIPP
             }
             else
             {
-                /* Packet is not fragmented, destination is this device. */
+                /* Packet is not fragmented, destination is this device, or a multicast group
+                 * that this device might be registered for. */
             }
         }
     #endif /* ipconfigETHERNET_DRIVER_FILTERS_PACKETS */
@@ -2153,6 +2206,13 @@ static eFrameProcessingResult_t prvProcessIPPacket( IPPacket_t * pxIPPacket,
                             }
                         #endif /* ( ipconfigREPLY_TO_INCOMING_PINGS == 1 ) || ( ipconfigSUPPORT_OUTGOING_PINGS == 1 ) */
                         break;
+
+                        #if ( ipconfigSUPPORT_IP_MULTICAST != 0 )
+                            case ipPROTOCOL_IGMP:
+                                /* The IP packet contained an IGMP frame.  */
+                                eReturn = eProcessIGMPPacket( pxNetworkBuffer );
+                                break;
+                        #endif /* ( ipconfigSUPPORT_IP_MULTICAST != 0 ) */
 
                     case ipPROTOCOL_UDP:
                        {
